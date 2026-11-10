@@ -8,19 +8,20 @@ samples of that class, and the server averages the class gradients.
   counts_dp    server picks from counts released once as [n + Lap(1/eps)]_+
   bits_rr      server picks uniformly among clients whose randomized-response
                presence bit is 1 (pp-CFL style metadata)
-  self_select  server broadcasts the class turn; every true holder trains and
-               uploads. Each non-holder uploads a zero with probability dummy_q
-               (cover traffic). The server receives only the SecAgg sum of
-               uploaders, then divides by the holder count n_c, not |uploaders|.
-               With eps given, n_c is released once as count + Lap(1/eps)
-               (floored at 1). dummy_q=1 recovers all-client uploads.
+  fedhbt       Holder-Blind Turn: server broadcasts the class turn; every true holder
+               trains and uploads. Each non-holder uploads a zero with
+               probability dummy_q (cover traffic). The server receives only
+               the SecAgg sum of uploaders, then divides by the holder count
+               n_c, not |uploaders|. With eps given, n_c is released once as
+               count + Lap(1/eps) (floored at 1). dummy_q=1 recovers all-client
+               uploads.
 A picked client that does not hold the class returns no gradient: the turn is lost.
 
 Privacy accounting is per class entry for every method, matching pp-CFL's per-bit
 randomized response.
 
 Communication per global step: server routing uploads C models (one per class
-turn). self_select uploads about sum_c [n_c + dummy_q*(K-n_c)] vectors, because
+turn). fedhbt uploads about sum_c [n_c + dummy_q*(K-n_c)] vectors, because
 holders always send and a random fraction dummy_q of non-holders send zeros.
 """
 
@@ -121,7 +122,7 @@ def train_class_turns(clients, counts, C, d, routing, eps=None, steps=1500, lr=0
     p = init_mlp(rng, d, hidden, C)
     K = len(clients)
     holders = [np.flatnonzero(counts[:, c] > 0) for c in range(C)]
-    if routing == "self_select":
+    if routing == "fedhbt":
         n_hold = np.array([len(h) for h in holders], dtype=float)
         if eps is not None:
             n_hold = np.maximum(n_hold + rng.laplace(0, 1.0 / eps, C), 1.0)
@@ -133,7 +134,7 @@ def train_class_turns(clients, counts, C, d, routing, eps=None, steps=1500, lr=0
     for t in range(steps):
         g_total = zeros_like(p)
         for c in rng.permutation(C):
-            if routing == "self_select":
+            if routing == "fedhbt":
                 if len(holders[c]) == 0:
                     continue
                 g_sum = zeros_like(p)

@@ -24,7 +24,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\scriptsize\color{muted}FedSelfSelect script (KR / EN)}
+\fancyhead[L]{\scriptsize\color{muted}FedHBT script (KR / EN)}
 \fancyhead[R]{\scriptsize\color{muted}short: problem / pipeline / results}
 \fancyfoot[C]{\scriptsize\color{muted}\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
@@ -65,9 +65,9 @@
 \begin{document}
 
 \begin{center}
-{\LARGE\bfseries\color{navy}FedSelfSelect 발표 대본}\\[0.3em]
-{\large\color{teal}Identification-free rare-class learning}\\[0.35em]
-{\footnotesize\color{muted}읽을 파일: \texttt{FedSelfSelect.pdf} \quad 영어는 오른쪽}
+{\LARGE\bfseries\color{navy}FedHBT 발표 대본}\\[0.3em]
+{\large\color{teal}Holder-Blind Turn}\\[0.35em]
+{\footnotesize\color{muted}읽을 파일: \texttt{FedHBT.pdf} \quad 영어는 오른쪽}
 \end{center}
 
 \vspace{0.2em}
@@ -252,7 +252,7 @@ $K=100$. 홀더는 그 클래스 샘플이 있는 클라이언트입니다.
 $\varepsilon=0.5$, $q=0.1$, seed 3개. 이 나눔은 실험 세팅입니다.
 
 시계는 두 개입니다. 1500과 $150\times 10\times 10$은 같은 값이 아닙니다.
-FedSelfSelect, Stratify, pp-CFL, Oracle은 클래스 턴 1500스텝. 공정 비교는 이 네 개입니다.
+FedHBT, Stratify, pp-CFL, Oracle은 클래스 턴 1500스텝. 공정 비교는 이 네 개입니다.
 FedAvg, FedProx, SCAFFOLD, FedDyn, MOON은 150 라운드 $\times$ 10명 $\times$ 10 로컬 스텝. 라벨을 안 보는 참조입니다.
 
 \key{홀더 2명, 30장은 데이터 크기입니다. 공정 비교는 클래스 턴 1500끼리입니다.}
@@ -265,7 +265,7 @@ Each client holds two or three common classes. Common minibatches are 64. Rare u
 $\varepsilon=0.5$, $q=0.1$, three seeds. This split is an experimental setup.
 
 Two clocks. 1500 is not $150\times 10\times 10$.
-FedSelfSelect, Stratify, pp-CFL, and Oracle share 1500 class-turn steps. That comparison is fair.
+FedHBT, Stratify, pp-CFL, and Oracle share 1500 class-turn steps. That comparison is fair.
 FedAvg, FedProx, SCAFFOLD, FedDyn, and MOON share 150 rounds $\times$ 10 clients $\times$ 10 local steps. They are label-blind references.
 
 \key{Two holders. Thirty is dataset size. The fair comparison is the 1500 class-turn methods.}}
@@ -280,7 +280,7 @@ Covertype이 증거가 갈리는 표입니다. overall은 다 약 58--62\%입니
 FedAvg, FedProx, SCAFFOLD, FedDyn, MOON은 전부 0.0입니다. 라벨을 몰라서 홀더 2명을 거의 안 봅니다.
 pp-CFL 1.2. 비트가 홀더를 지웁니다.
 Stratify 70.7. 카운트는 살지만 홀더를 지명합니다.
-FedSelfSelect 77.3. 지명 없이 희귀가 들어옵니다.
+FedHBT 77.3. 지명 없이 희귀가 들어옵니다.
 Oracle 79.6이 상한입니다.
 
 70.7 대 77.3이 이유가 아닙니다. 이유는 식별을 안 한다는 것입니다.
@@ -294,7 +294,7 @@ Only rare moves.
 FedAvg, FedProx, SCAFFOLD, FedDyn, and MOON are all 0.0. They never inspect labels, so they almost never see the two holders.
 pp-CFL is 1.2. Bits erase the holders.
 Stratify is 70.7. Counts survive, but the server named the holders.
-FedSelfSelect is 77.3. The rare class enters without naming anyone.
+FedHBT is 77.3. The rare class enters without naming anyone.
 Oracle 79.6 is the ceiling.
 
 The 70.7 versus 77.3 gap is not why we use the method. The reason is no identification.

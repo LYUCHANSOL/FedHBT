@@ -1,4 +1,4 @@
-"""Reproduce the FedSelfSelect tables.
+"""Reproduce the FedHBT tables.
 
   python run.py --dataset covtype
   python run.py --dataset shuttle --family fed
@@ -6,7 +6,7 @@
   python run.py --dataset covtype --quick
   python run.py --dataset covtype --plot-only
 
---family class  class-turn methods + FedAvg (Stratify/pp-CFL routing, FedSelfSelect, Oracle)
+--family class  class-turn methods + FedAvg (Stratify/pp-CFL routing, FedHBT, Oracle)
 --family fed    FedProx, SCAFFOLD, FedDyn, MOON (same clock as FedAvg)
 --family all    both (default)
 """
@@ -26,7 +26,7 @@ from fl import train_class_turns, train_fed_family, evaluate
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, "results")
-PRIVATE = ["counts_dp", "bits_rr", "self_select_dp"]
+PRIVATE = ["counts_dp", "bits_rr", "fedhbt_dp"]
 FED_FAMILY = ["fedavg", "fedprox", "scaffold", "feddyn", "moon"]
 
 
@@ -89,12 +89,12 @@ def main():
                 p = train_fed_family(clients, C, d, method=method, rounds=rounds, seed=seed)
                 record(fed_rows, method, "-", p)
         if do_class:
-            for routing in ["oracle", "self_select"]:
+            for routing in ["oracle", "fedhbt"]:
                 p, lost, uploads = train_class_turns(
                     clients, counts, C, d, routing, steps=steps, seed=seed)
                 record(class_rows, routing, "-", p, lost, uploads)
             for method in PRIVATE:
-                routing = "self_select" if method == "self_select_dp" else method
+                routing = "fedhbt" if method == "fedhbt_dp" else method
                 for eps in eps_grid:
                     p, lost, uploads = train_class_turns(
                         clients, counts, C, d, routing, eps=eps, steps=steps, seed=seed)
@@ -138,12 +138,23 @@ def plot(csv_path, dataset, rare_per_holder):
               f"{dataset}: balanced accuracy"]
     fig, ax = plt.subplots(1, 3, figsize=(16, 4.2))
     for j, key in enumerate(keys):
-        for method, mk in [("counts_dp", "o-"), ("bits_rr", "s-"), ("self_select_dp", "^-")]:
-            ax[j].semilogx(eps_grid, [mean_of(method, key, e) for e in eps_grid], mk, label=method)
-        for ref, ls in [("oracle", "k--"), ("self_select", "g-"), ("fedavg", "r:")]:
+        plot_name = {
+            "counts_dp": "Stratify",
+            "bits_rr": "pp-CFL",
+            "fedhbt_dp": "FedHBT",
+            "oracle": "Oracle",
+            "fedhbt": "FedHBT (no noise)",
+            "fedavg": "FedAvg",
+        }
+        for method, mk in [("counts_dp", "o-"), ("bits_rr", "s-"), ("fedhbt_dp", "^-")]:
+            ax[j].semilogx(
+                eps_grid, [mean_of(method, key, e) for e in eps_grid], mk,
+                label=plot_name[method],
+            )
+        for ref, ls in [("oracle", "k--"), ("fedhbt", "g-"), ("fedavg", "r:")]:
             y = mean_of(ref, key)
             if np.isfinite(y):
-                ax[j].axhline(y, ls=ls[1:], c=ls[0], label=ref)
+                ax[j].axhline(y, ls=ls[1:], c=ls[0], label=plot_name[ref])
         ax[j].set_xticks(eps_grid)
         ax[j].set_xticklabels([f"{e:g}" for e in eps_grid])
         ax[j].minorticks_off()

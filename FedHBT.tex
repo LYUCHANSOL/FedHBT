@@ -24,8 +24,8 @@
 \theoremstyle{plain}
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{FedSelfSelect}\\[0.35em]
-\large Identification-free rare-class learning in federated classification}
+\title{\textbf{FedHBT}\\[0.35em]
+\large Holder-Blind Turn: identification-free rare-class learning in federated classification}
 \author{}
 \date{}
 
@@ -43,7 +43,7 @@ Randomized-response presence bits, as in pp-CFL, flip many zeros to ones. With t
 
 Laplace counts, as in Stratify, often still rank the true holders. A local count of thirty survives noise of scale $1/\varepsilon$. Rare accuracy then stays high. The cost is identification: the server selected those clients, so it knows who holds the rare class.
 
-The problem is therefore not ``raise rare accuracy above Stratify.'' The problem is to train the rare class \emph{without the server choosing holders}. FedAvg avoids naming people, but it never inspects labels, so the rare class is almost unused. FedSelfSelect keeps class turns, drops the naming step, and hides the uploader set.
+The problem is therefore not ``raise rare accuracy above Stratify.'' The problem is to train the rare class \emph{without the server choosing holders}. FedAvg avoids naming people, but it never inspects labels, so the rare class is almost unused. FedHBT (Holder-Blind Turn) keeps class turns, drops the naming step, and hides the uploader set.
 
 \section{Method}
 
@@ -51,7 +51,7 @@ Holders of class $c$ always upload a class-$c$ gradient. Non-holders upload a ze
 
 \begin{algorithm}[H]
 \DontPrintSemicolon
-\caption{FedSelfSelect}
+\caption{FedHBT}
 \KwIn{clients $\{1,\ldots,K\}$; classes $\{1,\ldots,C\}$; steps $T$; learning rate $\eta$; batch size $B$; privacy budget $\varepsilon$; dummy rate $q$}
 \KwOut{global model $w$}
 $w \leftarrow$ random initialization\;
@@ -192,11 +192,11 @@ The partition is an experimental setup, not an assumption about deployed network
 
 A \emph{holder} of class $c$ is a client that has at least one sample of class $c$. There are $K{=}100$ clients. Each client holds two or three common classes, split by a Dirichlet($1$) draw. The rare class has exactly two holders. When we split the data we give each of those two holders $30$ rare samples. That $30$ is the local rare \emph{dataset} size. It is not the minibatch size. Common classes use minibatches of $B{=}64$. A rare holder has only $30$ points, so the rare gradient uses all $30$. Common classes are capped at $6{,}000$ training samples. No point appears in more than one of train, balanced test, and natural-mix test. The balanced test uses up to $400$ points per class and is used for rare and balanced accuracy. The natural-mix test keeps the original class frequencies and is used for overall accuracy.
 
-There are two training clocks. They are not the same quantity, and $1{,}500$ is not $150\times 10$. Class-turn methods (FedSelfSelect, Stratify, pp-CFL, Oracle) run $T{=}1{,}500$ steps. One step visits every class once, in random order. FedAvg does not use class turns. It runs $150$ rounds, picks $10$ of the $100$ clients each round, and each picked client takes $10$ local SGD steps on mixed minibatches. The product $150\times 10\times 10$ belongs to FedAvg only.
+There are two training clocks. They are not the same quantity, and $1{,}500$ is not $150\times 10$. Class-turn methods (FedHBT, Stratify, pp-CFL, Oracle) run $T{=}1{,}500$ steps. One step visits every class once, in random order. FedAvg does not use class turns. It runs $150$ rounds, picks $10$ of the $100$ clients each round, and each picked client takes $10$ local SGD steps on mixed minibatches. The product $150\times 10\times 10$ belongs to FedAvg only.
 
-The model is the MLP above, learning rate $\eta{=}0.1$. Private methods use $\varepsilon{=}0.5$ in the main tables. FedSelfSelect uses dummy rate $q{=}0.1$. Means are over seeds $\{0,1,2\}$.
+The model is the MLP above, learning rate $\eta{=}0.1$. Private methods use $\varepsilon{=}0.5$ in the main tables. FedHBT uses dummy rate $q{=}0.1$. Means are over seeds $\{0,1,2\}$.
 
-Routing baselines share the class-turn loop. Oracle samples a true holder. Stratify here is Laplace counts used as a routing score, not CKKS. pp-CFL here is randomized-response presence bits used as a routing score, not the full clustering pipeline. A routed client with no class-$c$ samples returns no gradient, and that turn is lost. Oracle and Stratify therefore upload $C$ vectors per step. FedSelfSelect uploads~\eqref{eq:comm} per class.
+Routing baselines share the class-turn loop. Oracle samples a true holder. Stratify here is Laplace counts used as a routing score, not CKKS. pp-CFL here is randomized-response presence bits used as a routing score, not the full clustering pipeline. A routed client with no class-$c$ samples returns no gradient, and that turn is lost. Oracle and Stratify therefore upload $C$ vectors per step. FedHBT uploads~\eqref{eq:comm} per class.
 
 \begin{table}[h]
 \centering
@@ -224,7 +224,7 @@ Seeds & $0,1,2$ \\
 \toprule
 Loop & Methods & Budget \\
 \midrule
-Class turn & FedSelfSelect, Stratify, pp-CFL, Oracle & $1{,}500$ steps \\
+Class turn & FedHBT, Stratify, pp-CFL, Oracle & $1{,}500$ steps \\
 FedAvg family & FedAvg, FedProx, SCAFFOLD, FedDyn, MOON & $150$ rounds $\times$ $10$ clients $\times$ $10$ local steps \\
 \bottomrule
 \end{tabular}
@@ -254,8 +254,8 @@ FedDyn & 58.2 & 0.0 & 55.9 & 98.2 & 0.7 & 74.7 & 90.6 & 49.1 & 86.1 \\
 MOON & 57.9 & 0.0 & 56.0 & 98.4 & 2.1 & 75.1 & 90.6 & 52.7 & 86.7 \\
 pp-CFL & 62.3 & 1.2 & 59.2 & 98.2 & 67.4 & 91.4 & 92.0 & 99.3 & 93.0 \\
 Stratify & 62.2 & 70.7 & 70.8 & 98.6 & 92.4 & 97.7 & 92.8 & 99.5 & 93.4 \\
-FedSelfSelect & 61.9 & 77.3 & 71.6 & 98.6 & 95.1 & 98.4 & 92.3 & 99.5 & 93.2 \\
-FedSelfSelect (no noise) & 61.5 & 80.0 & 71.5 & 98.6 & 95.1 & 98.4 & 92.3 & 99.8 & 93.3 \\
+FedHBT & 61.9 & 77.3 & 71.6 & 98.6 & 95.1 & 98.4 & 92.3 & 99.5 & 93.2 \\
+FedHBT (no noise) & 61.5 & 80.0 & 71.5 & 98.6 & 95.1 & 98.4 & 92.3 & 99.8 & 93.3 \\
 Oracle & 61.6 & 79.6 & 71.6 & 98.6 & 93.8 & 98.1 & 92.6 & 99.8 & 93.5 \\
 \bottomrule
 \end{tabular}}
@@ -275,13 +275,13 @@ FedDyn & 0.0 & 0.7 & 49.1 \\
 MOON & 0.0 & 2.1 & 52.7 \\
 pp-CFL & 1.2 & 67.4 & 99.3 \\
 Stratify & 70.7 & 92.4 & 99.5 \\
-FedSelfSelect & 77.3 & 95.1 & 99.5 \\
+FedHBT & 77.3 & 95.1 & 99.5 \\
 Oracle & 79.6 & 93.8 & 99.8 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Label-blind aggregators (FedAvg, FedProx, SCAFFOLD, FedDyn, MOON) keep overall accuracy and miss the rare class on Covertype. SCAFFOLD raises overall a little; rare recall stays 0.0. The rare column is the object of the problem. On Covertype, bit routing loses the rare class. Count routing keeps it and names holders. FedSelfSelect keeps it without naming holders. The gap versus Stratify is not the reason to use the method. Dry Bean does not separate label-aware methods; SCAFFOLD can fit BOMBAY without class turns because that class is easy.
+Label-blind aggregators (FedAvg, FedProx, SCAFFOLD, FedDyn, MOON) keep overall accuracy and miss the rare class on Covertype. SCAFFOLD raises overall a little; rare recall stays 0.0. The rare column is the object of the problem. On Covertype, bit routing loses the rare class. Count routing keeps it and names holders. FedHBT keeps it without naming holders. The gap versus Stratify is not the reason to use the method. Dry Bean does not separate label-aware methods; SCAFFOLD can fit BOMBAY without class turns because that class is easy.
 
 \section{Communication}
 
@@ -298,8 +298,8 @@ FedAvg / FedProx / SCAFFOLD / FedDyn / MOON & 1{,}500$^*$ & 1{,}500$^*$ & 1{,}50
 pp-CFL & 10{,}500 & 6{,}000 & 10{,}500 \\
 Stratify & 10{,}500 & 6{,}000 & 10{,}500 \\
 Oracle & 10{,}500 & 6{,}000 & 10{,}500 \\
-FedSelfSelect ($q{=}1$) & 1{,}050{,}000 & 600{,}000 & 1{,}050{,}000 \\
-FedSelfSelect ($q{=}0.1$) & 444{,}750 & 392{,}100 & 438{,}000 \\
+FedHBT ($q{=}1$) & 1{,}050{,}000 & 600{,}000 & 1{,}050{,}000 \\
+FedHBT ($q{=}0.1$) & 444{,}750 & 392{,}100 & 438{,}000 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -313,17 +313,13 @@ Method & Covertype & Shuttle & Dry Bean \\
 \midrule
 FedAvg family & 10$^*$ & 10$^*$ & 10$^*$ \\
 pp-CFL / Stratify / Oracle & 7 & 4 & 7 \\
-FedSelfSelect ($q{=}1$) & 700 & 400 & 700 \\
-FedSelfSelect ($q{=}0.1$) & 297 & 261 & 292 \\
+FedHBT ($q{=}1$) & 700 & 400 & 700 \\
+FedHBT ($q{=}0.1$) & 297 & 261 & 292 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \noindent
-$^*$FedAvg is $150\times 10$. Other methods scale by $1{,}500$ steps. Shuttle has four classes; the others have seven. With $q{=}0.1$, FedSelfSelect uses $0.42\times$ the all-upload cost on Covertype and $0.65\times$ on Shuttle. Relative to Stratify that is still $42\times$ and $65\times$. Parameter counts are $3{,}975$ (Covertype), $900$ (Shuttle), and $1{,}543$ (Dry Bean). Bytes scale as (uploads)$\times$(parameters).
-
-\section{Name}
-
-The working title FedSelfSelect is too close to FedSelect. Three acronyms of the method are recommended instead: FedHBT (Holder-Blind Turn), FedNCT (Nameless Class Turn), and FedBCT (Broadcast Class Turn).
+$^*$FedAvg is $150\times 10$. Other methods scale by $1{,}500$ steps. Shuttle has four classes; the others have seven. With $q{=}0.1$, FedHBT uses $0.42\times$ the all-upload cost on Covertype and $0.65\times$ on Shuttle. Relative to Stratify that is still $42\times$ and $65\times$. Parameter counts are $3{,}975$ (Covertype), $900$ (Shuttle), and $1{,}543$ (Dry Bean). Bytes scale as (uploads)$\times$(parameters).
 
 \end{document}

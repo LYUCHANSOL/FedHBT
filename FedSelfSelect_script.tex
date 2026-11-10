@@ -1,0 +1,307 @@
+% !TEX program = xelatex
+% Short speaker script: 4 questions + pipeline + results
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{fontspec}
+\usepackage[hangul]{kotex}
+\usepackage[margin=1.45cm]{geometry}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{amsmath,amssymb}
+\usepackage[most]{tcolorbox}
+\usepackage{paracol}
+
+\setmainfont{Malgun Gothic}
+\setsansfont{Malgun Gothic}
+
+\definecolor{navy}{HTML}{1B365D}
+\definecolor{teal}{HTML}{0F7B6C}
+\definecolor{muted}{HTML}{5C6B7A}
+\definecolor{coral}{HTML}{C45C3E}
+\definecolor{sand}{HTML}{F7F5F0}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\scriptsize\color{muted}FedSelfSelect script (KR / EN)}
+\fancyhead[R]{\scriptsize\color{muted}short: problem / pipeline / results}
+\fancyfoot[C]{\scriptsize\color{muted}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\titleformat{\section}
+  {\large\bfseries\color{navy}}{\thesection}{0.7em}{}
+
+\tcbuselibrary{breakable,skins}
+\setlength{\columnsep}{16pt}
+\setlength{\columnseprule}{0.45pt}
+\colseprulecolor{navy!30}
+
+\NewDocumentEnvironment{scriptslide}{mmm}{%
+  \begin{tcolorbox}[
+    colback=navy, colframe=navy, boxrule=0pt, arc=1pt,
+    left=7pt,right=7pt,top=3.5pt,bottom=3.5pt,
+    before skip=0.65em, after skip=0.25em,
+    fontupper=\bfseries\color{white}\normalsize,
+  ]
+  Slide #1.\quad #2\hfill{\mdseries\scriptsize #3}
+  \end{tcolorbox}
+  \nopagebreak
+  \begin{paracol}{2}
+  \small
+  \parskip=0.38em\relax
+  \emergencystretch=2em\relax
+  {\color{navy}\textbf{한글.}}\par
+}{\end{paracol}}
+
+\newcommand{\key}[1]{\par\vspace{0.22em}{\color{coral}\textbf{#1}}\par}
+
+\NewDocumentCommand{\en}{+m}{%
+  \switchcolumn
+  {\color{teal}\textbf{English.}}\par
+  #1%
+}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{navy}FedSelfSelect 발표 대본}\\[0.3em]
+{\large\color{teal}Identification-free rare-class learning}\\[0.35em]
+{\footnotesize\color{muted}읽을 파일: \texttt{FedSelfSelect.pdf} \quad 영어는 오른쪽}
+\end{center}
+
+\vspace{0.2em}
+\noindent
+발표는 \textbf{오른쪽 English}를 읽습니다. 왼쪽은 같은 내용입니다.
+주황 문장만 말해도 흐름은 됩니다. 전체 약 7분입니다.
+
+\begin{tcolorbox}[colback=sand,colframe=teal,boxrule=0.5pt,arc=1pt,
+  left=7pt,right=7pt,top=5pt,bottom=5pt]
+{\color{navy}\textbf{이 네 질문.}}
+1. Problem $\rightarrow$ 슬라이드 1.\\
+2. Equations $\rightarrow$ 슬라이드 3.\\
+3. Experiment setup $\rightarrow$ 슬라이드 5.\\
+4. Loss / theory $\rightarrow$ 슬라이드 4.\\
+파이프라인은 슬라이드 2. 결과는 슬라이드 6.
+\end{tcolorbox}
+
+\section{Problem}
+
+\begin{scriptslide}{1}{What issue in FL?}{약 70초}
+질문 1입니다. 문제 정의입니다.
+
+연합분류는 데이터 $K$명에게 두고 공유 모델 $w$ 하나를 학습합니다.
+Stratify 같은 라벨 인식 방법은 클래스마다 턴을 줍니다.
+서버가 클래스 $c$ 홀더를 지명해야 그 턴이 돕니다.
+
+희귀 클래스는 홀더가 2명뿐입니다.
+라벨 메타데이터에 노이즈를 넣고 그걸로 사람을 고르면 희귀가 먼저 깨집니다.
+
+pp-CFL 비트는 없는 사람을 있다로 만듭니다. Covertype 희귀 1.2\%, overall은 62\%라 안 보입니다.
+Stratify 카운트는 홀더 30장을 살리고 희귀 70.7\%입니다. 대신 서버가 그 2명을 압니다.
+FedAvg는 지명을 안 하지만 라벨도 안 봐서 희귀가 0입니다.
+
+\key{문제는 Stratify보다 희귀를 올리는 것이 아닙니다. 서버가 홀더를 고르지 않고 희귀를 학습하는 것입니다.}
+\en{Question 1. The problem.
+
+Federated classification keeps data on $K$ clients and fits one shared model $w$.
+Label-aware methods such as Stratify give each class a turn.
+The server must name a holder of class $c$, or that turn does not run.
+
+The rare class has only two holders.
+If the server adds noise to label metadata and then routes from it, the rare class breaks first.
+
+pp-CFL bits turn non-holders into false holders. Covertype rare is 1.2 percent; overall stays 62 percent, so the failure is hidden.
+Stratify counts keep the thirty samples and rare reaches 70.7 percent, but the server named those two clients.
+FedAvg names nobody and inspects no labels, so rare is zero.
+
+\key{The issue is not to beat Stratify on rare accuracy. It is to learn the rare class without the server choosing holders.}}
+\end{scriptslide}
+
+\section{Algorithm}
+
+\begin{scriptslide}{2}{Pipeline, nine steps}{약 80초}
+알고리즘입니다. 1--2는 한 번, 3--8은 한 스텝, 9는 1500번입니다.
+
+1. 각 클라이언트가 클래스마다 있다/없다만 올립니다. 서버는 합 $n_c$만 압니다. 누구인지는 모릅니다.
+
+2. $n_c$에 라플라스 노이즈를 붙여 $\tilde n_c$를 만듭니다. 노이즈는 이 숫자에만 붙습니다.
+
+3. 서버가 모델 $w$를 뿌리고 ``이번 클래스는 $c$''라고만 말합니다. 사람 이름을 고르지 않습니다.
+
+4. 클래스 $c$가 있는 클라이언트는 그 샘플로 그래디언트를 계산해서 항상 올립니다.
+
+5. 없는 클라이언트는 확률 $q$로만 0을 올립니다. 나머지는 침묵합니다.
+
+6. 서버는 SecAgg 합만 받습니다. 값이 그래디언트인지 0인지, 누가 올렸는지는 모릅니다.
+
+7. 그 합을 올린 사람 수가 아니라 홀더 수 $\tilde n_c$로 나눕니다. 0은 합을 바꾸지 않습니다.
+
+8. 클래스 $1,\ldots,C$를 같은 방식으로 돈 뒤, 그 평균으로 모델을 한 번 업데이트합니다.
+
+9. 3--8을 반복합니다. 1--2는 다시 하지 않습니다.
+
+\key{서버는 홀더를 고르지 않습니다. 합만 받고, 홀더 수로 나눕니다.}
+\en{The algorithm. Steps 1--2 once. Steps 3--8 one step. Step 9 repeats that 1500 times.
+
+1. Each client sends only yes or no per class. The server sees the sum $n_c$, not who.
+
+2. Laplace noise on $n_c$ gives $\tilde n_c$. Noise sits only on that number.
+
+3. The server broadcasts $w$ and says only ``this class is $c$.'' It does not pick a name.
+
+4. A client that has class $c$ computes a gradient on those samples and always uploads.
+
+5. A client that does not have class $c$ uploads 0 with probability $q$. The rest stay silent.
+
+6. The server receives only the SecAgg sum. It does not see zeros versus gradients, and it does not see who sent them.
+
+7. It divides by the holder count $\tilde n_c$, not by the number of uploaders. Zeros do not change the sum.
+
+8. After all $C$ classes, it updates the model once with that average.
+
+9. Repeat 3--8. Do not repeat 1--2.
+
+\key{The server does not choose holders. It sees a sum and divides by the holder count.}}
+\end{scriptslide}
+
+\section{Equations}
+
+\begin{scriptslide}{3}{Key equations}{약 70초}
+질문 2입니다. 알고리즘 말고 식입니다.
+
+(1) $\mathcal{H}_c$는 홀더 집합, $n_c$는 인원. 서버가 봐도 되는 것은 합입니다.
+
+(2) $\tilde n_c = \max(n_c+\mathrm{Lap}(1/\varepsilon),1)$. 나눗셈 분모입니다. 라우팅 점수가 아닙니다.
+
+(3) 홀더 그래디언트 $g_k=\nabla\ell(w;\mathcal{B}_k)$.
+
+(4) 없는 사람은 확률 $q$로만 0을 올립니다.
+
+(5) $S_c$는 SecAgg 합입니다.
+
+(6) $\bar g_c=S_c/\tilde n_c$. $|\mathcal{U}_c|$로 나누면 안 됩니다.
+
+(7) $w\leftarrow w-\eta(\sum_c\bar g_c)/C$. 클래스 균등 평균입니다. $n_k$ 가중이 아닙니다.
+
+(8) 업로드 $\mathbb{E}[|\mathcal{U}_c|]=n_c+q(K-n_c)$. 희귀 턴은 약 12명입니다.
+
+\key{핵심은 식 (6)입니다. 홀더 수로 나눕니다. 올린 사람 수로 나누지 않습니다.}
+\en{Question 2. The equations besides the algorithm.
+
+(1) $\mathcal{H}_c$ is the holder set, $n_c$ the count. The server may see a sum, not a name list.
+
+(2) $\tilde n_c=\max(n_c+\mathrm{Lap}(1/\varepsilon),1)$. A divisor, not a routing score.
+
+(3) Holder gradient $g_k=\nabla\ell(w;\mathcal{B}_k)$.
+
+(4) A non-holder uploads 0 with probability $q$.
+
+(5) $S_c$ is the SecAgg sum.
+
+(6) $\bar g_c=S_c/\tilde n_c$. Do not divide by $|\mathcal{U}_c|$.
+
+(7) $w\leftarrow w-\eta(\sum_c\bar g_c)/C$. Unweighted mean over classes, not an $n_k$ average over clients.
+
+(8) Uploads $\mathbb{E}[|\mathcal{U}_c|]=n_c+q(K-n_c)$. About twelve on a rare turn.
+
+\key{Equation (6) is the key. Divide by the holder count, not by the number of uploaders.}}
+\end{scriptslide}
+
+\section{Loss and theory}
+
+\begin{scriptslide}{4}{Loss and guarantee}{약 50초}
+질문 4입니다.
+
+손실은 softmax 교차엔트로피입니다.
+$\ell(w;x,y)=-\log[\mathrm{softmax}(f_w(x))]_y$.
+RMSE가 아닙니다. 모델은 hidden 64 ReLU MLP입니다.
+점수는 overall, 희귀 recall, balanced accuracy입니다.
+
+이론은 항등식 두 개입니다.
+Prop.~1. dummy 0은 합을 안 바꿉니다. $S_c$는 홀더 합입니다.
+Prop.~2. 라플라스는 분모만 흔듭니다. 누구를 학습시킬지는 안 고릅니다.
+$n_c$ 카운트만 $\varepsilon$-DP입니다. $w_T$의 DP도, 수렴도, 희귀 accuracy 하한도 없습니다.
+통신이 큰 것은 limitation입니다.
+
+\key{손실은 CE입니다. 보장은 합이 홀더 합이라는 것입니다. 희귀 점수 정리는 없습니다.}
+\en{Question 4.
+
+The loss is softmax cross-entropy: minus log of the true-class softmax probability.
+Not RMSE. The model is a ReLU MLP of width 64.
+We report overall accuracy, rare recall, and balanced accuracy.
+
+Theory is two identities.
+Prop.~1. Dummy zeros leave $S_c$ equal to the holder sum.
+Prop.~2. Laplace perturbs only the divisor. It does not choose who trains.
+Only the count $n_c$ is $\varepsilon$-DP. We do not claim DP of $w_T$, convergence, or a rare-accuracy bound.
+Large communication is a limitation.
+
+\key{The loss is cross-entropy. The guarantee is that the sum is the holder sum. There is no rare-accuracy theorem.}}
+\end{scriptslide}
+
+\section{Setup}
+
+\begin{scriptslide}{5}{Experiment setup}{약 55초}
+질문 3입니다.
+
+Covertype, Shuttle, Dry Bean. 표 분류입니다.
+$K=100$. 홀더는 그 클래스 샘플이 있는 클라이언트입니다.
+희귀 홀더 2명, 각자 희귀 샘플 30장. 30은 배치가 아닙니다. 그 2명의 희귀 데이터 크기입니다.
+흔한 클래스는 클라이언트당 2--3개, 미니배치 64. 희귀는 30장 전부 씁니다.
+$\varepsilon=0.5$, $q=0.1$, seed 3개. 이 나눔은 실험 세팅입니다.
+
+시계는 두 개입니다. 1500과 $150\times 10\times 10$은 같은 값이 아닙니다.
+FedSelfSelect, Stratify, pp-CFL, Oracle은 클래스 턴 1500스텝. 공정 비교는 이 네 개입니다.
+FedAvg, FedProx, SCAFFOLD, FedDyn, MOON은 150 라운드 $\times$ 10명 $\times$ 10 로컬 스텝. 라벨을 안 보는 참조입니다.
+
+\key{홀더 2명, 30장은 데이터 크기입니다. 공정 비교는 클래스 턴 1500끼리입니다.}
+\en{Question 3.
+
+Covertype, Shuttle, Dry Bean. Tabular classification.
+$K=100$. A holder is a client who has that class.
+Two rare holders, thirty rare samples each. Thirty is not the batch size. It is their rare dataset size.
+Each client holds two or three common classes. Common minibatches are 64. Rare uses all thirty.
+$\varepsilon=0.5$, $q=0.1$, three seeds. This split is an experimental setup.
+
+Two clocks. 1500 is not $150\times 10\times 10$.
+FedSelfSelect, Stratify, pp-CFL, and Oracle share 1500 class-turn steps. That comparison is fair.
+FedAvg, FedProx, SCAFFOLD, FedDyn, and MOON share 150 rounds $\times$ 10 clients $\times$ 10 local steps. They are label-blind references.
+
+\key{Two holders. Thirty is dataset size. The fair comparison is the 1500 class-turn methods.}}
+\end{scriptslide}
+
+\section{Results}
+
+\begin{scriptslide}{6}{Accuracy}{약 55초}
+Covertype이 증거가 갈리는 표입니다. overall은 다 약 58--62\%입니다.
+
+희귀만 갈립니다.
+FedAvg, FedProx, SCAFFOLD, FedDyn, MOON은 전부 0.0입니다. 라벨을 몰라서 홀더 2명을 거의 안 봅니다.
+pp-CFL 1.2. 비트가 홀더를 지웁니다.
+Stratify 70.7. 카운트는 살지만 홀더를 지명합니다.
+FedSelfSelect 77.3. 지명 없이 희귀가 들어옵니다.
+Oracle 79.6이 상한입니다.
+
+70.7 대 77.3이 이유가 아닙니다. 이유는 식별을 안 한다는 것입니다.
+Shuttle도 희귀가 갈립니다. Dry Bean은 BOMBAY가 쉬워서 방법이 거의 안 갈립니다.
+통신은 limitation입니다. $q=0.1$이어도 Covertype에서 Stratify보다 약 42배입니다.
+
+\key{overall은 숨깁니다. Covertype 희귀가 문제입니다. 주장은 식별 없이 희귀를 학습하는 것입니다.}
+\en{Covertype is the table that splits the claim. Overall is about 58 to 62 percent for every method.
+
+Only rare moves.
+FedAvg, FedProx, SCAFFOLD, FedDyn, and MOON are all 0.0. They never inspect labels, so they almost never see the two holders.
+pp-CFL is 1.2. Bits erase the holders.
+Stratify is 70.7. Counts survive, but the server named the holders.
+FedSelfSelect is 77.3. The rare class enters without naming anyone.
+Oracle 79.6 is the ceiling.
+
+The 70.7 versus 77.3 gap is not why we use the method. The reason is no identification.
+Shuttle still splits on rare. Dry Bean does not, because BOMBAY is easy.
+Communication is a limitation. Even at $q=0.1$, Covertype uploads are about 42 times Stratify.
+
+\key{Overall hides the failure. Covertype rare is the object. The claim is rare learning without naming holders.}}
+\end{scriptslide}
+
+\end{document}

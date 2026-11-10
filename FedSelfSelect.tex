@@ -1,0 +1,329 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=22mm]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{setspace}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\captionsetup{font=small, skip=6pt}
+\setlength{\parindent}{1.2em}
+\setlength{\parskip}{0.35em}
+\pagestyle{plain}
+
+\SetKwInput{KwIn}{Input}
+\SetKwInput{KwOut}{Output}
+\SetKw{InParallel}{in parallel}
+\SetKwFunction{SecAgg}{SecAgg}
+\SetKwFunction{Lap}{Lap}
+\SetKwFunction{Bern}{Bernoulli}
+\newcolumntype{L}{>{\raggedright\arraybackslash}p{5.0cm}}
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+
+\title{\textbf{FedSelfSelect}\\[0.35em]
+\large Identification-free rare-class learning in federated classification}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{plain}
+
+\section{Problem}
+
+Federated classification keeps records on $K$ clients and fits one shared model $w$. Label-aware methods such as Stratify do not average every local epoch. They schedule a turn per class and train on samples of that class. The server must then know who holds class $c$, because it names the client that trains.
+
+That naming is the failure we study. One class is rare: only $k_{\mathrm{rare}}\ll K$ clients hold it. If the server publishes noisy label metadata and then routes from that metadata, the rare class is the first to break.
+
+Randomized-response presence bits, as in pp-CFL, flip many zeros to ones. With two true holders among a hundred clients, false positives drown the rare bit. The server sends the rare turn to a non-holder. The turn is lost. Rare accuracy collapses. Overall accuracy stays high, because common classes still have many holders.
+
+Laplace counts, as in Stratify, often still rank the true holders. A local count of thirty survives noise of scale $1/\varepsilon$. Rare accuracy then stays high. The cost is identification: the server selected those clients, so it knows who holds the rare class.
+
+The problem is therefore not ``raise rare accuracy above Stratify.'' The problem is to train the rare class \emph{without the server choosing holders}. FedAvg avoids naming people, but it never inspects labels, so the rare class is almost unused. FedSelfSelect keeps class turns, drops the naming step, and hides the uploader set.
+
+\section{Method}
+
+Holders of class $c$ always upload a class-$c$ gradient. Non-holders upload a zero with probability $q$. The server sees only a secure sum, then divides by a noisy holder count, not by the number of uploaders. Dummy zeros do not change the sum. After all $C$ classes, the model takes one step on the class-mean gradient.
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\caption{FedSelfSelect}
+\KwIn{clients $\{1,\ldots,K\}$; classes $\{1,\ldots,C\}$; steps $T$; learning rate $\eta$; batch size $B$; privacy budget $\varepsilon$; dummy rate $q$}
+\KwOut{global model $w$}
+$w \leftarrow$ random initialization\;
+\BlankLine
+\tcp{once: server learns how many holders, not who}
+\For{$c = 1$ \KwTo $C$}{
+  $n_c \leftarrow \SecAgg\bigl(\{\mathbf{1}[c \in \mathcal{D}_k]\}_{k=1}^{K}\bigr)$\;
+  $\tilde n_c \leftarrow \max\bigl(n_c + \Lap(1/\varepsilon),\, 1\bigr)$\;
+}
+\BlankLine
+\For{$t = 1$ \KwTo $T$}{
+  $G \leftarrow 0$\;
+  \For{$c = 1$ \KwTo $C$ \emph{in random order}}{
+    broadcast $(w,\, c)$ to all clients\;
+    $\mathcal{U}_c \leftarrow \emptyset$\;
+    \For{$k = 1$ \KwTo $K$ \InParallel}{
+      \eIf{$c \in \mathcal{D}_k$}{
+        sample minibatch $\mathcal{B}_k$ from class-$c$ samples in $\mathcal{D}_k$\;
+        $g_k \leftarrow \nabla \ell(w; \mathcal{B}_k)$\;
+        $\mathcal{U}_c \leftarrow \mathcal{U}_c \cup \{k\}$ \tcp*{holders always upload}
+      }{
+        \If{$\Bern(q)=1$}{
+          $g_k \leftarrow 0$\;
+          $\mathcal{U}_c \leftarrow \mathcal{U}_c \cup \{k\}$ \tcp*{dummy zero}
+        }
+      }
+    }
+    $S_c \leftarrow \SecAgg(\{g_k : k \in \mathcal{U}_c\})$\;
+    $G \leftarrow G + S_c / \tilde n_c$ \tcp*{not $|\mathcal{U}_c|$}
+  }
+  $w \leftarrow w - \eta \cdot G / C$\;
+}
+\Return{$w$}
+\end{algorithm}
+
+\vspace{0.4em}
+\noindent
+\begin{tabular}{@{}llp{9.4cm}@{}}
+\toprule
+Lines & Who & Role \\
+\midrule
+2--4 & Server & Receives only the holder \emph{count} per class. Noise sits on $\tilde n_c$. \\
+8 & Server & Broadcasts $(w,c)$. Does not name a client. \\
+11--14 & Holder & Computes a minibatch gradient and always uploads. \\
+15--18 & Non-holder & Uploads $0$ with probability $q$; otherwise silent. \\
+19--20 & Server & Receives the secure sum and divides by $\tilde n_c$, not $|\mathcal{U}_c|$. \\
+21 & Server & Averages the $C$ class means and takes one step. \\
+\bottomrule
+\end{tabular}
+
+\section{Key equations}
+
+Let $\mathcal{D}_k$ be client $k$'s labeled set and
+\begin{equation}
+\mathcal{H}_c = \{k : c \in \mathcal{D}_k\}, \qquad
+n_c = |\mathcal{H}_c| = \sum_{k=1}^{K} \mathbf{1}[c \in \mathcal{D}_k].
+\label{eq:holders}
+\end{equation}
+Equation~\eqref{eq:holders} is the object the server is allowed to see, as a sum, not as a name list. Secure aggregation returns $n_c$ once. Laplace noise is applied only to that scalar:
+\begin{equation}
+\tilde n_c = \max\bigl(n_c + \mathrm{Lap}(1/\varepsilon),\, 1\bigr).
+\label{eq:noisy-n}
+\end{equation}
+The noisy count is a divisor. It is not a routing score. The no-noise ablation uses $\tilde n_c \leftarrow n_c$.
+
+On a class-$c$ turn the server broadcasts $(w,c)$. Holder $k\in\mathcal{H}_c$ draws a minibatch $\mathcal{B}_k$ from its class-$c$ samples and sends
+\begin{equation}
+g_k = \nabla_w \ell(w;\mathcal{B}_k).
+\label{eq:local-grad}
+\end{equation}
+A non-holder joins the uploader set with probability $q$ and sends a zero:
+\begin{equation}
+k \in \mathcal{U}_c \;\text{if}\;
+k\in\mathcal{H}_c
+\;\text{or}\;
+\bigl(k\notin\mathcal{H}_c \;\text{and}\; \mathrm{Bernoulli}(q)=1\bigr).
+\label{eq:uploaders}
+\end{equation}
+The server receives only the secure sum
+\begin{equation}
+S_c = \sum_{k \in \mathcal{U}_c} g_k.
+\label{eq:secagg}
+\end{equation}
+Dummy coordinates are zero, so they do not change $S_c$. The class vector used in the step is the holder mean, not the uploader mean:
+\begin{equation}
+\bar g_c = \frac{S_c}{\tilde n_c}
+\qquad\text{(not $S_c/|\mathcal{U}_c|$)}.
+\label{eq:class-mean}
+\end{equation}
+Dividing by $|\mathcal{U}_c|$ would shrink the rare gradient whenever dummy traffic is large. Dividing by $\tilde n_c$ keeps the scale of a mean over holders. After a random permutation of the $C$ classes,
+\begin{equation}
+w \leftarrow w - \eta \cdot \frac{1}{C}\sum_{c=1}^{C} \bar g_c.
+\label{eq:step}
+\end{equation}
+Equation~\eqref{eq:step} is an unweighted mean over classes, not a sample-size weighted mean over clients. Each class, including the rare class, contributes $1/C$ of the step. Expected uploads on a class-$c$ turn are
+\begin{equation}
+\mathbb{E}[|\mathcal{U}_c|] = n_c + q(K-n_c).
+\label{eq:comm}
+\end{equation}
+With $n_c=2$, $K=100$, and $q=0.1$, a rare turn has about twelve uploaders.
+
+\section{Loss}
+
+The predictor $f_w$ is a one-hidden-layer ReLU MLP with width $64$ and a softmax head. The local loss is multiclass cross-entropy. For a labeled pair $(x,y)$,
+\begin{equation}
+\ell(w;x,y) = -\log \bigl[\mathrm{softmax}(f_w(x))\bigr]_{y}.
+\label{eq:ce}
+\end{equation}
+A minibatch of size $B$ (or all class-$c$ samples, if fewer than $B$) uses the mean of~\eqref{eq:ce}. Rare holders have thirty samples, so a rare minibatch is those thirty points. The reported metrics are not RMSE. The task is classification: overall accuracy on a natural-mix test set, rare-class recall, and balanced accuracy (mean per-class recall on a class-balanced test set).
+
+FedAvg, used only as a label-blind baseline, minimizes the same loss with local SGD on mixed minibatches and sample-size weighted aggregation. It does not use class turns.
+
+\section{What is guaranteed}
+
+The claims below are identities of Algorithm~1. They are not a rare-accuracy rate and not differential privacy of the trained weights $w_T$.
+
+\begin{proposition}[Dummy zeros do not change the sum]
+\label{prop:dummy}
+If every holder uploads~\eqref{eq:local-grad} and every dummy coordinate is $0$, then
+$S_c = \sum_{k\in\mathcal{H}_c} g_k$.
+\end{proposition}
+
+\noindent
+The uploader set $\mathcal{U}_c$ is therefore not equal to $\mathcal{H}_c$, but the sum is still the holder sum. Under ideal secure aggregation the server does not see which summands were zero.
+
+\begin{proposition}[Noisy divisor, not noisy routing]
+\label{prop:divisor}
+If $\tilde n_c = n_c$, then $\bar g_c$ is the uniform mean of the holder gradients. Laplace noise in~\eqref{eq:noisy-n} perturbs only that divisor. It does not choose who trains.
+\end{proposition}
+
+A count has sensitivity one, so $n_c+\mathrm{Lap}(1/\varepsilon)$ is $\varepsilon$-differentially private for that count. Flooring at $1$ is post-processing. This statement is only about $\{\tilde n_c\}_{c=1}^{C}$. It is not a claim that $w_T$ is differentially private, and it is not a bound on rare recall.
+
+We do not prove convergence of~\eqref{eq:step}. We do not prove a $K/k_{\mathrm{rare}}$ rate. Communication in~\eqref{eq:comm} is larger than one-holder routing. That cost is a limitation, not the objective.
+
+\section{Experimental setup}
+
+The partition is an experimental setup, not an assumption about deployed networks. We use three tabular classification sets: Covertype ($C{=}7$, $d{=}54$), Statlog Shuttle ($C{=}4$, $d{=}9$), and Dry Bean ($C{=}7$, $d{=}16$). Classes with fewer than $100$ samples are dropped. The rare class is the smallest class that remains.
+
+A \emph{holder} of class $c$ is a client that has at least one sample of class $c$. There are $K{=}100$ clients. Each client holds two or three common classes, split by a Dirichlet($1$) draw. The rare class has exactly two holders. When we split the data we give each of those two holders $30$ rare samples. That $30$ is the local rare \emph{dataset} size. It is not the minibatch size. Common classes use minibatches of $B{=}64$. A rare holder has only $30$ points, so the rare gradient uses all $30$. Common classes are capped at $6{,}000$ training samples. No point appears in more than one of train, balanced test, and natural-mix test. The balanced test uses up to $400$ points per class and is used for rare and balanced accuracy. The natural-mix test keeps the original class frequencies and is used for overall accuracy.
+
+There are two training clocks. They are not the same quantity, and $1{,}500$ is not $150\times 10$. Class-turn methods (FedSelfSelect, Stratify, pp-CFL, Oracle) run $T{=}1{,}500$ steps. One step visits every class once, in random order. FedAvg does not use class turns. It runs $150$ rounds, picks $10$ of the $100$ clients each round, and each picked client takes $10$ local SGD steps on mixed minibatches. The product $150\times 10\times 10$ belongs to FedAvg only.
+
+The model is the MLP above, learning rate $\eta{=}0.1$. Private methods use $\varepsilon{=}0.5$ in the main tables. FedSelfSelect uses dummy rate $q{=}0.1$. Means are over seeds $\{0,1,2\}$.
+
+Routing baselines share the class-turn loop. Oracle samples a true holder. Stratify here is Laplace counts used as a routing score, not CKKS. pp-CFL here is randomized-response presence bits used as a routing score, not the full clustering pipeline. A routed client with no class-$c$ samples returns no gradient, and that turn is lost. Oracle and Stratify therefore upload $C$ vectors per step. FedSelfSelect uploads~\eqref{eq:comm} per class.
+
+\begin{table}[h]
+\centering
+\caption{Data split. Shared by every method.}
+\begin{tabular}{lc}
+\toprule
+Item & Value \\
+\midrule
+Clients $K$ & $100$ \\
+Rare holders (clients who have the rare class) & $2$ \\
+Rare samples on each of those $2$ clients & $30$ \\
+Common classes per client & $2$--$3$ \\
+Minibatch $B$ (common classes) & $64$ \\
+Hidden width / learning rate $\eta$ & $64$ / $0.1$ \\
+Dummy rate $q$ / privacy $\varepsilon$ (main tables) & $0.1$ / $0.5$ \\
+Seeds & $0,1,2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Two different training loops. Do not multiply one into the other.}
+\begin{tabular}{llc}
+\toprule
+Loop & Methods & Budget \\
+\midrule
+Class turn & FedSelfSelect, Stratify, pp-CFL, Oracle & $1{,}500$ steps \\
+FedAvg family & FedAvg, FedProx, SCAFFOLD, FedDyn, MOON & $150$ rounds $\times$ $10$ clients $\times$ $10$ local steps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Covertype is the setting where overall scores match and rare scores split. Shuttle is a second dataset with the same split. Dry Bean is a case where the rare class is easy, so routing errors barely move rare accuracy.
+
+\section{Accuracy}
+
+Means over three seeds, in percent. Noisy methods use $\varepsilon=0.5$.
+
+\begin{table}[h]
+\centering
+\setlength{\tabcolsep}{3.6pt}
+\caption{Accuracy (\%). Covertype, Shuttle, and Dry Bean. Private methods use $\varepsilon=0.5$.}
+{\small
+\begin{tabular}{lrrr rrr rrr}
+\toprule
+& \multicolumn{3}{c}{Covertype} & \multicolumn{3}{c}{Shuttle} & \multicolumn{3}{c}{Dry Bean} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
+Method & overall & rare & bal. & overall & rare & bal. & overall & rare & bal. \\
+\midrule
+FedAvg & 57.9 & 0.0 & 55.8 & 98.3 & 2.8 & 75.3 & 90.7 & 54.3 & 86.8 \\
+FedProx & 57.9 & 0.0 & 55.8 & 98.3 & 2.1 & 75.1 & 90.6 & 52.7 & 86.6 \\
+SCAFFOLD & 62.1 & 0.0 & 61.0 & 98.8 & 9.0 & 77.0 & 92.7 & 100.0 & 93.5 \\
+FedDyn & 58.2 & 0.0 & 55.9 & 98.2 & 0.7 & 74.7 & 90.6 & 49.1 & 86.1 \\
+MOON & 57.9 & 0.0 & 56.0 & 98.4 & 2.1 & 75.1 & 90.6 & 52.7 & 86.7 \\
+pp-CFL & 62.3 & 1.2 & 59.2 & 98.2 & 67.4 & 91.4 & 92.0 & 99.3 & 93.0 \\
+Stratify & 62.2 & 70.7 & 70.8 & 98.6 & 92.4 & 97.7 & 92.8 & 99.5 & 93.4 \\
+FedSelfSelect & 61.9 & 77.3 & 71.6 & 98.6 & 95.1 & 98.4 & 92.3 & 99.5 & 93.2 \\
+FedSelfSelect (no noise) & 61.5 & 80.0 & 71.5 & 98.6 & 95.1 & 98.4 & 92.3 & 99.8 & 93.3 \\
+Oracle & 61.6 & 79.6 & 71.6 & 98.6 & 93.8 & 98.1 & 92.6 & 99.8 & 93.5 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Rare-class accuracy only ($\varepsilon=0.5$).}
+\begin{tabular}{Lrrr}
+\toprule
+Method & Covertype & Shuttle & Dry Bean \\
+\midrule
+FedAvg & 0.0 & 2.8 & 54.3 \\
+FedProx & 0.0 & 2.1 & 52.7 \\
+SCAFFOLD & 0.0 & 9.0 & 100.0 \\
+FedDyn & 0.0 & 0.7 & 49.1 \\
+MOON & 0.0 & 2.1 & 52.7 \\
+pp-CFL & 1.2 & 67.4 & 99.3 \\
+Stratify & 70.7 & 92.4 & 99.5 \\
+FedSelfSelect & 77.3 & 95.1 & 99.5 \\
+Oracle & 79.6 & 93.8 & 99.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Label-blind aggregators (FedAvg, FedProx, SCAFFOLD, FedDyn, MOON) keep overall accuracy and miss the rare class on Covertype. SCAFFOLD raises overall a little; rare recall stays 0.0. The rare column is the object of the problem. On Covertype, bit routing loses the rare class. Count routing keeps it and names holders. FedSelfSelect keeps it without naming holders. The gap versus Stratify is not the reason to use the method. Dry Bean does not separate label-aware methods; SCAFFOLD can fit BOMBAY without class turns because that class is easy.
+
+\section{Communication}
+
+Counts are model-sized uploads in one run. FedAvg: $150$ rounds. All other methods: $1{,}500$ steps. $K{=}100$, $q{=}0.1$.
+
+\begin{table}[h]
+\centering
+\caption{Total uploads.}
+\begin{tabular}{Lrrr}
+\toprule
+Method & Covertype & Shuttle & Dry Bean \\
+\midrule
+FedAvg / FedProx / SCAFFOLD / FedDyn / MOON & 1{,}500$^*$ & 1{,}500$^*$ & 1{,}500$^*$ \\
+pp-CFL & 10{,}500 & 6{,}000 & 10{,}500 \\
+Stratify & 10{,}500 & 6{,}000 & 10{,}500 \\
+Oracle & 10{,}500 & 6{,}000 & 10{,}500 \\
+FedSelfSelect ($q{=}1$) & 1{,}050{,}000 & 600{,}000 & 1{,}050{,}000 \\
+FedSelfSelect ($q{=}0.1$) & 444{,}750 & 392{,}100 & 438{,}000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Uploads per step (totals above divided by $1{,}500$; FedAvg is $10$ per round).}
+\begin{tabular}{Lrrr}
+\toprule
+Method & Covertype & Shuttle & Dry Bean \\
+\midrule
+FedAvg family & 10$^*$ & 10$^*$ & 10$^*$ \\
+pp-CFL / Stratify / Oracle & 7 & 4 & 7 \\
+FedSelfSelect ($q{=}1$) & 700 & 400 & 700 \\
+FedSelfSelect ($q{=}0.1$) & 297 & 261 & 292 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+$^*$FedAvg is $150\times 10$. Other methods scale by $1{,}500$ steps. Shuttle has four classes; the others have seven. With $q{=}0.1$, FedSelfSelect uses $0.42\times$ the all-upload cost on Covertype and $0.65\times$ on Shuttle. Relative to Stratify that is still $42\times$ and $65\times$. Parameter counts are $3{,}975$ (Covertype), $900$ (Shuttle), and $1{,}543$ (Dry Bean). Bytes scale as (uploads)$\times$(parameters).
+
+\section{Name}
+
+The working title FedSelfSelect is too close to FedSelect. Three acronyms of the method are recommended instead: FedHBT (Holder-Blind Turn), FedNCT (Nameless Class Turn), and FedBCT (Broadcast Class Turn).
+
+\end{document}

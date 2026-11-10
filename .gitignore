@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.aux
+*.log
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+data/covertype/
+data/openml/
